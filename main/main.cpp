@@ -955,5 +955,30 @@ int main()
 
 	}
 
+    printf("---- Lua memory allocator ----");
+    {
+        
+        struct LuaMem
+        {
+            static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
+                (void)ud; (void)osize;  /* not used */
+                if (nsize == 0) {
+                    free(ptr);
+                    return NULL;
+                }
+                else
+                    return realloc(ptr, nsize);
+            }
+        };
+        
+        // *ud func pointer: called for every allocation (good for debug allocation tracking ect.)
+        void* ud = nullptr;
+        lua_State* L = lua_newstate(LuaMem::l_alloc, ud);
+        
+        
+        lua_close(L);
+        
+    }
+    
 	return 0;
 }
