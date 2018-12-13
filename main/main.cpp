@@ -955,25 +955,103 @@ int main()
 
 	}
 
-    printf("---- Lua memory allocator ----");
+    printf("---- Lua memory allocator ----\n");
     {
         
-        struct LuaMem
+        struct ArenaAllocator
         {
+            void* m_begin;
+            void* m_end;
+            
+            // Current position
+            char* m_curr;
+            
+            // accept begining and ending pointers of arena
+            ArenaAllocator(void* begin, void* end)
+            : m_begin(begin),
+            m_end(end),
+            m_curr(static_cast<char*>(m_begin))
+            {
+                
+            }
+            
+            // Allocates section of memory
+            void* Allocate(size_t sizeBytes)
+            {
+                // Out of memory
+                assert((m_curr + sizeBytes) < m_end);
+                
+                printf("Allocated %d bytes\n", (int) sizeBytes);
+                void* ptr = m_curr;
+                m_curr += sizeBytes;
+                
+                return ptr;
+            }
+            
+            void DeAllocate(void* ptr, size_t osize)
+            {
+                // Burning through memory for performance reasons.
+                // Memory will be freed when the Arena goes out of scope
+                
+                
+                assert(ptr != nullptr); // Ensure we are not deallocating a nullptr
+                printf("DeAllocate %d bytes\n", (int) osize);
+            }
+            
+            void* ReAllocate(void* ptr, size_t osize, size_t nsize)
+            {
+                printf("ReAllocated %d bytes to %d bytes\n", (int) osize, (int) nsize);
+                void* newPtr = Allocate(nsize);
+                memcpy(newPtr, ptr, osize);
+                DeAllocate(ptr, osize);
+                return newPtr;
+            }
+            
+            
+            /*
+             ud: user data
+             ptr: usage pointer
+             osize: old size of memory block
+             nsize: new size of memory block
+             */
             static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
-                (void)ud; (void)osize;  /* not used */
+                ArenaAllocator* pool = static_cast<ArenaAllocator*>(ud);
+                
                 if (nsize == 0) {
-                    free(ptr);
+                    
+                    if (ptr)
+                    {
+                        pool->DeAllocate(ptr, osize);
+                    }
+                    
                     return NULL;
                 }
                 else
-                    return realloc(ptr, nsize);
+                {
+                    // Allocation
+                    if (ptr == nullptr)
+                    {
+                        return pool->Allocate(nsize);
+                    }
+                    // Reallocation
+                    else
+                    {
+                        return pool->ReAllocate(ptr, osize, nsize);
+                    }
+                    
+                }
             }
         };
         
-        // *ud func pointer: called for every allocation (good for debug allocation tracking ect.)
-        void* ud = nullptr;
-        lua_State* L = lua_newstate(LuaMem::l_alloc, ud);
+        // 20KB of memory on stack
+        constexpr int POOL_SIZE = 1024 * 5;
+        char memory[POOL_SIZE];
+        
+        // Heapless allocation
+        ArenaAllocator pool(memory, &memory[POOL_SIZE - 1]);
+        
+        // *ud: called for every allocation (good for debug allocation tracking ect.)
+        lua_State* L = lua_newstate(ArenaAllocator::l_alloc, &pool);
         
         
         lua_close(L);
