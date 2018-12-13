@@ -1,7 +1,7 @@
 #include <iostream>
 #include "lua.hpp"
 #include <assert.h>
-#include <new.h>
+#include <new>
 
 // Lua types:
 // nil
@@ -61,11 +61,10 @@ int main()
 
 	// Call LUA Functions
 	{
-		constexpr char* LUA_FILE = R"(
+        const char* LUA_FILE = R"(
 		function Pythagoras(a, b)
 			return (a*a) + (b*b), a, b
 		end
-	
 		)";
 
 		lua_State* L = luaL_newstate();
@@ -113,7 +112,7 @@ int main()
 			return 1;
 		};
 
-		constexpr char* LUA_FILE = R"(
+		const char* LUA_FILE = R"(
 		function Pythagoras(a, b)
 			csqr = NativePythagoras(a, b)
 			return csqr, a, b
@@ -187,7 +186,7 @@ int main()
 			return 0;
 		};
 
-		constexpr char* LUA_FILE = R"(
+		const char* LUA_FILE = R"(
 		sprite = CreateSprite()
 		MoveSprite(sprite, 5, 7)
 		)";
@@ -216,7 +215,7 @@ int main()
 
 	printf("---- Tables ---- \n");
 	{
-		constexpr char* LUA_FILE = R"(
+		const char* LUA_FILE = R"(
 		x = {dave = "busy", ian = "idle" }
 		)";
 
@@ -312,7 +311,7 @@ int main()
 			}
 		};
 
-		constexpr char* LUA_FILE = R"(
+		const char* LUA_FILE = R"(
 		v1 = CreateVector() -- table
 		v2 = CreateVector() -- table
 		v1.x = 11
@@ -417,7 +416,7 @@ int main()
 			return 0;
 		};
 
-		constexpr char* LUA_FILE = R"(
+		const char* LUA_FILE = R"(
 		sprite = CreateSprite()
 		MoveSprite(sprite, 5, 7)
 		DrawSprite(sprite)
@@ -531,7 +530,7 @@ int main()
 			return 0;
 		};
 
-		constexpr char* LUA_FILE = R"(
+		const char* LUA_FILE = R"(
 		sprite = Sprite.new()
 		sprite:Move(5, 7)			-- Syntax sugar for: Sprite.Move(sprite, 5, 7)
 		sprite:Draw()
@@ -696,7 +695,7 @@ int main()
 
 		};
 
-		constexpr char* LUA_FILE = R"(
+		const char* LUA_FILE = R"(
 		sprite = Sprite.new()
 		sprite:Move(5, 7)			-- Syntax sugar for: Sprite.Move(sprite, 5, 7)
 		sprite:Draw()
@@ -893,7 +892,7 @@ int main()
 			return 0;
 		};
 
-		constexpr char* LUA_FILE = R"(
+		const char* LUA_FILE = R"(
 		sprite = Sprite.new()
 		sprite:Move( 6, 7 )		-- Sprite.Move( sprite, 6, 7 )
 		sprite:Draw()
