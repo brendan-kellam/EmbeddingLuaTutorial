@@ -27,7 +27,7 @@ struct ArenaAllocator
     // Allocates section of memory
     void* Allocate(size_t sizeBytes)
     {
-        // Alignes up to the next 8 byte boundy
+        // Alignes up to the next 8 byte boundry
         m_curr = (char*) ( ((uintptr_t) m_curr + (ALIGNMENT - 1)) & ~(ALIGNMENT - 1) );
         
         // Out of memory
@@ -66,7 +66,8 @@ struct ArenaAllocator
      osize: old size of memory block
      nsize: new size of memory block
      */
-    static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
+    static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize)
+    {
         ArenaAllocator* pool = static_cast<ArenaAllocator*>(ud);
         
         if (nsize == 0) {
