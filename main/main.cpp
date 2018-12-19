@@ -898,60 +898,73 @@ int main()
 		const char* LUA_FILE = R"(
 		sprite = Sprite.new()
 		sprite:Move( 6, 7 )		-- Sprite.Move( sprite, 6, 7 )
-		sprite:Draw()
+		-- sprite:Draw()
 		sprite.y = 10
 		sprite.zzz = 99
 		sprite.x = sprite.zzz
 		temp_x = sprite.x
-		sprite:Draw()
+		-- sprite:Draw()
 		)";
 
-		lua_State* L = luaL_newstate();
+        
+        // 20KB of memory on stack
+        constexpr int POOL_SIZE = 1024 * 20;
+        char memory[POOL_SIZE];
+        
+        // Heapless allocation
+        ArenaAllocator pool(memory, &memory[POOL_SIZE - 1]);
+        
+        for (int i = 0; i < 50000; i++)
+        {
+            pool.Reset();
+            lua_State* L = lua_newstate(ArenaAllocator::l_alloc, &pool);
+            //lua_State* L = luaL_newstate();
 
-		// Create new Sprite table
-		// Reduce # of globals / name conflicts
-		lua_newtable(L);
-		int spriteTableIdx = lua_gettop(L);			// Get top of stack
-		lua_pushvalue(L, spriteTableIdx);			// Push table onto the stack again
-		lua_setglobal(L, "Sprite");					// set table name. Will pop top table off, leaving one.
+            // Create new Sprite table
+            // Reduce # of globals / name conflicts
+            lua_newtable(L);
+            int spriteTableIdx = lua_gettop(L);			// Get top of stack
+            lua_pushvalue(L, spriteTableIdx);			// Push table onto the stack again
+            lua_setglobal(L, "Sprite");					// set table name. Will pop top table off, leaving one.
 
-		lua_pushcfunction(L, CreateSprite);
-		lua_setfield(L, -2, "new");
-		lua_pushcfunction(L, MoveSprite);
-		lua_setfield(L, -2, "Move");
-		lua_pushcfunction(L, DrawSprite);
-		lua_setfield(L, -2, "Draw");
+            lua_pushcfunction(L, CreateSprite);
+            lua_setfield(L, -2, "new");
+            lua_pushcfunction(L, MoveSprite);
+            lua_setfield(L, -2, "Move");
+            lua_pushcfunction(L, DrawSprite);
+            lua_setfield(L, -2, "Draw");
 
 
-		// We can attach a meta-tables to our Sprite to call the deconstruction upon GC!
-		// We will only need 1 meta-table for all Sprites
-		luaL_newmetatable(L, "SpriteMetaTable");
-		lua_pushstring(L, "__gc");				// Only available for user datum
-		lua_pushcfunction(L, DestroySprite);
-		lua_settable(L, -3);					// Set meta table
+            // We can attach a meta-tables to our Sprite to call the deconstruction upon GC!
+            // We will only need 1 meta-table for all Sprites
+            luaL_newmetatable(L, "SpriteMetaTable");
+            lua_pushstring(L, "__gc");				// Only available for user datum
+            lua_pushcfunction(L, DestroySprite);
+            lua_settable(L, -3);					// Set meta table
 
-		// Add meta method for handling ":" sugar.
-		// __index is invoked when you try and do something and the operation doesn't exist
-		lua_pushstring(L, "__index");
-		lua_pushcfunction(L, SpriteIndex);
-		lua_settable(L, -3);
+            // Add meta method for handling ":" sugar.
+            // __index is invoked when you try and do something and the operation doesn't exist
+            lua_pushstring(L, "__index");
+            lua_pushcfunction(L, SpriteIndex);
+            lua_settable(L, -3);
 
-		// __newindex -> for writing
-		lua_pushstring(L, "__newindex");
-		lua_pushcfunction(L, SpriteNewIndex);
-		lua_settable(L, -3);
+            // __newindex -> for writing
+            lua_pushstring(L, "__newindex");
+            lua_pushcfunction(L, SpriteNewIndex);
+            lua_settable(L, -3);
 
-		int err = luaL_dostring(L, LUA_FILE);
-		if (err == LUA_OK)
-		{
-			printf("Ok.");
-		}
-		else
-		{
-			printf("Error: %s\n", lua_tostring(L, -1));
-		}
+            int err = luaL_dostring(L, LUA_FILE);
+            if (err == LUA_OK)
+            {
+                //printf("Ok.\n");
+            }
+            else
+            {
+                printf("Error: %s\n", lua_tostring(L, -1));
+            }
 
-		lua_close(L);
+            lua_close(L);
+        }
 
 		assert(numberOfSpritesExisting == 0);
 
@@ -962,7 +975,7 @@ int main()
     {
         
         // 20KB of memory on stack
-        constexpr int POOL_SIZE = 1024 * 5;
+        constexpr int POOL_SIZE = 1024 * 10;
         char memory[POOL_SIZE];
         
         // Heapless allocation
