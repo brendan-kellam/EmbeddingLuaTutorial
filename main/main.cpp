@@ -898,20 +898,19 @@ int main()
 		const char* LUA_FILE = R"(
 		sprite = Sprite.new()
 		sprite:Move( 6, 7 )		-- Sprite.Move( sprite, 6, 7 )
-		-- sprite:Draw()
+		sprite:Draw()
 		sprite.y = 10
 		sprite.zzz = 99
 		sprite.x = sprite.zzz
 		temp_x = sprite.x
-		-- sprite:Draw()
+		sprite:Draw()
 		)";
 
         
         // 20KB of memory on stack
-        constexpr int POOL_SIZE = 1024 * 20;
+        constexpr int POOL_SIZE = 1024 * 10;
         char memory[POOL_SIZE];
         
-        // Heapless allocation
         ArenaAllocator pool(memory, &memory[POOL_SIZE - 1]);
         
         for (int i = 0; i < 50000; i++)
@@ -919,9 +918,13 @@ int main()
             pool.Reset();
             lua_State* L = lua_newstate(ArenaAllocator::l_alloc, &pool);
             //lua_State* L = luaL_newstate();
+            
+            //lua_State* L = lua_newstate(GlobalAllocator::l_alloc, &pool);
 
             // Create new Sprite table
             // Reduce # of globals / name conflicts
+            
+            
             lua_newtable(L);
             int spriteTableIdx = lua_gettop(L);			// Get top of stack
             lua_pushvalue(L, spriteTableIdx);			// Push table onto the stack again
