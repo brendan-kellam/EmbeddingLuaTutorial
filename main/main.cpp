@@ -5,6 +5,7 @@
 #include <string.h>
 #include <cstdio>
 #include <new>
+#include <vector>
 
 // Lua types:
 // nil
@@ -913,7 +914,7 @@ int main()
         
         ArenaAllocator pool(memory, &memory[POOL_SIZE - 1]);
         
-        for (int i = 0; i < 50000; i++)
+        for (int i = 0; i < 10; i++)
         {
             pool.Reset();
             lua_State* L = lua_newstate(ArenaAllocator::l_alloc, &pool);
@@ -1018,6 +1019,273 @@ int main()
         lua_close(L);
         
     }
+    
+    printf("---- Upvalues and light user data ----\n");
+    {
+        // upvalues -> Store state in a C function
+        // globals stored in a table called _g
+        // lua calls this a "closure"
+        //
+        // ligh user data -> C pointer that is not gc or managed by lua in any way. It's a pointer in our memory!
+        
+        // Our own type
+        struct Sprite
+        {
+            int x; // bad encaspulation
+            int y;
+            
+            Sprite() : x(0), y(0)
+            { }
+            
+            ~Sprite()
+            { }
+            
+            void Move(int velX, int velY)
+            {
+                x += velX;
+                y += velY;
+            }
+            
+            void Draw()
+            {
+                printf("sprite(%p): x = %d, y = %d\n", this, x, y);
+            }
+        };
+        
+        // Ex use case: Sprite manager
+        struct SpriteManager
+        {
+            std::vector<Sprite*> m_sprites;
+            int m_numberOfSpritesExisting;
+            
+            SpriteManager()
+                : m_numberOfSpritesExisting(0)
+            {
+                
+            }
+            
+            void LookAfterSprite(Sprite* sprite)
+            {
+                m_numberOfSpritesExisting++;
+                m_sprites.push_back(sprite);
+            }
+            
+            void ForgetSprite(Sprite* sprite)
+            {
+                int i = 0;
+                for (auto& s : m_sprites)
+                {
+                    if (s == sprite)
+                    {
+                        m_numberOfSpritesExisting--;
+                        m_sprites.erase(m_sprites.begin() + i);
+                        return;
+                    }
+                    i++;
+                }
+            }
+        };
+        
+        // This will probably live as a long-lived service
+        // Once we create a sprite, we want to tell the manager about the created sprite.
+        // Unfotunetely, in CreateSprite we don't have access to the spriteManager.
+        // Instead, we can push a upvalue that can be associated with CreateSprite. We can then use the upvalue to grab the SpriteManager.
+        // Could be assosiated with multiple managers
+        SpriteManager spriteManager;
+        
+        auto CreateSprite = [](lua_State* L) -> int
+        {
+            // Get up-value: up value contains pointer to user light value
+            SpriteManager* sm = (SpriteManager*) lua_touserdata(L, lua_upvalueindex(1));
+            assert(sm);
+            
+            // Get lua to create a new sprite (and manage the memory!)
+            void* pointerToSprite = lua_newuserdata(L, sizeof(Sprite));
+            
+            // Placement new (calls Sprite's constructor without allocating memory)
+            new (pointerToSprite) Sprite();
+            
+            // (Only one instance of this sprite metatable)
+            luaL_getmetatable(L, "SpriteMetaTable");
+            assert(lua_istable(L, -1));
+            lua_setmetatable(L, -2);        // Set metatable to user datum Sprite. This command pops metatable off stack
+            
+            // USER TABLE:
+            // Stores any additional value to the native object that we didn't have at compile time
+            lua_newtable(L);
+            lua_setuservalue(L, 1);        // Associate this userdatum with the non-native table
+            
+            // Notify the manager of a new sprite
+            sm->LookAfterSprite((Sprite*) pointerToSprite);
+            
+            return 1;
+        };
+        
+        auto DestroySprite = [](lua_State* L) -> int
+        {
+            // Get up-value: up value contains pointer to user light value
+            SpriteManager* sm = (SpriteManager*) lua_touserdata(L, lua_upvalueindex(1));
+            assert(sm);
+            
+            // Call deconstruction
+            Sprite* sprite = (Sprite*)lua_touserdata(L, -1);
+            sm->ForgetSprite(sprite);
+            sprite->~Sprite();
+            return 0;
+        };
+        
+        auto MoveSprite = [](lua_State* L) -> int
+        {
+            Sprite* sprite = (Sprite*)lua_touserdata(L, -3);
+            lua_Number velX = lua_tonumber(L, -2);
+            lua_Number velY = lua_tonumber(L, -1);
+            sprite->Move((int)velX, (int)velY);
+            return 0;
+        };
+        
+        auto DrawSprite = [](lua_State* L) -> int
+        {
+            Sprite* sprite = (Sprite*)lua_touserdata(L, -1);
+            sprite->Draw();
+            return 0;
+        };
+        
+        auto SpriteIndex = [](lua_State* L) -> int
+        {
+            assert(lua_isuserdata(L, -2));    //1
+            assert(lua_isstring(L, -1));    //2
+            
+            Sprite* sprite = (Sprite*)lua_touserdata(L, -2);
+            const char* index = lua_tostring(L, -1);
+            if (strcmp(index, "x") == 0)
+            {
+                lua_pushnumber(L, sprite->x);
+                return 1;
+            }
+            else if (strcmp(index, "y") == 0)
+            {
+                lua_pushnumber(L, sprite->y);
+                return 1;
+            }
+            else
+            {
+                lua_getuservalue(L, 1);
+                lua_pushvalue(L, 2);
+                lua_gettable(L, -2);
+                if (lua_isnil(L, -1))
+                {
+                    lua_getglobal(L, "Sprite");
+                    lua_pushstring(L, index);
+                    lua_rawget(L, -2);
+                }
+                return 1;
+            }
+        };
+        auto SpriteNewIndex = [](lua_State* L) -> int
+        {
+            assert(lua_isuserdata(L, -3)); // 1
+            assert(lua_isstring(L, -2));   // 2 - Index we are accessing
+            // 3 - Value we want to set
+            
+            Sprite* sprite = (Sprite*)lua_touserdata(L, -3);
+            const char* index = lua_tostring(L, -2);
+            
+            // Properties
+            if (strcmp(index, "x") == 0)
+            {
+                sprite->x = (int) lua_tonumber(L, -1);
+            }
+            else if (strcmp(index, "y") == 0)
+            {
+                sprite->y = (int) lua_tonumber(L, -1);
+            }
+            else
+            {
+                // Get user value table associated with this user datum
+                lua_getuservalue(L, 1);    // 1 - table
+                lua_pushvalue(L, 2);    // 2 - index
+                lua_pushvalue(L, 3);    // 3 - value
+                lua_settable(L, -3);
+            }
+            
+            return 0;
+        };
+        
+        const char* LUA_FILE = R"(
+        sprite = Sprite.new()
+        sprite:Move( 6, 7 )        -- Sprite.Move( sprite, 6, 7 )
+        sprite:Draw()
+        sprite.y = 10
+        sprite.zzz = 99
+        sprite.x = sprite.zzz
+        temp_x = sprite.x
+        sprite:Draw()
+        Sprite.new()
+        Sprite.new()
+        )";
+        
+        
+        // 20KB of memory on stack
+        constexpr int POOL_SIZE = 1024 * 10;
+        char memory[POOL_SIZE];
+        
+        ArenaAllocator pool(memory, &memory[POOL_SIZE - 1]);
+    
+        pool.Reset();
+        lua_State* L = lua_newstate(ArenaAllocator::l_alloc, &pool);
+        
+        lua_newtable(L);
+        int spriteTableIdx = lua_gettop(L);            // Get top of stack
+        lua_pushvalue(L, spriteTableIdx);            // Push table onto the stack again
+        lua_setglobal(L, "Sprite");                    // set table name. Will pop top table off, leaving one.
+        
+        constexpr int NUMBER_OF_UPVALUES = 1;
+        lua_pushlightuserdata(L, &spriteManager);
+        lua_pushcclosure(L, CreateSprite, NUMBER_OF_UPVALUES);
+        lua_setfield(L, -2, "new");
+        lua_pushcfunction(L, MoveSprite);
+        lua_setfield(L, -2, "Move");
+        lua_pushcfunction(L, DrawSprite);
+        lua_setfield(L, -2, "Draw");
+        
+        
+        // We can attach a meta-tables to our Sprite to call the deconstruction upon GC!
+        // We will only need 1 meta-table for all Sprites
+        luaL_newmetatable(L, "SpriteMetaTable");
+        
+        lua_pushstring(L, "__gc");                // Only available for user datum
+        lua_pushlightuserdata(L, &spriteManager);
+        lua_pushcclosure(L, DestroySprite, NUMBER_OF_UPVALUES);
+        lua_settable(L, -3);                    // Set meta table
+        
+        // Add meta method for handling ":" sugar.
+        // __index is invoked when you try and do something and the operation doesn't exist
+        lua_pushstring(L, "__index");
+        lua_pushcfunction(L, SpriteIndex);
+        lua_settable(L, -3);
+        
+        // __newindex -> for writing
+        lua_pushstring(L, "__newindex");
+        lua_pushcfunction(L, SpriteNewIndex);
+        lua_settable(L, -3);
+        
+        int err = luaL_dostring(L, LUA_FILE);
+        if (err == LUA_OK)
+        {
+            //printf("Ok.\n");
+        }
+        else
+        {
+            printf("Error: %s\n", lua_tostring(L, -1));
+        }
+        
+        lua_close(L);
+    
+        
+        assert(spriteManager.m_numberOfSpritesExisting == 0);
+        
+    }
+    
     
 	return 0;
 }
