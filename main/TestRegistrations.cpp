@@ -30,6 +30,30 @@ int Mul(int x, int y)
     return x * y;
 }
 
+// Our own type
+struct Sprite
+{
+    int x; // bad encaspulation
+    int y;
+    
+    Sprite() : x(0), y(0)
+    { }
+    
+    ~Sprite()
+    { }
+    
+    void Move(int velX, int velY)
+    {
+        x += velX;
+        y += velY;
+    }
+    
+    void Draw()
+    {
+        printf("sprite(%p): x = %d, y = %d\n", this, x, y);
+    }
+};
+
 
 // Register our native types
 // Creates method before main gets called
@@ -40,5 +64,13 @@ RTTR_REGISTRATION
     rttr::registration::method("Test", &Test);
     rttr::registration::method("Add", &Add);
     rttr::registration::method("Mul", &Mul);
+    
+    // Register Sprite class
+    rttr::registration::class_<Sprite>("Sprite")
+        .constructor()
+        .method("Move", &Sprite::Move)
+        .method("Draw", &Sprite::Draw)
+        .property("x", &Sprite::x)
+        .property("y", &Sprite::y);
 }
 

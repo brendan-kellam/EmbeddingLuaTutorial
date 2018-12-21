@@ -18,7 +18,10 @@ Global.HelloWorld()
 Global.HelloWorld2()
 local c = Global.Mul(42, 43)
 Global.Test(c, 22, 10)
+local spr = Sprite.new()
 )";
+
+
 
 union PassByValue
 {
@@ -144,6 +147,20 @@ int CallGlobalFromLua(lua_State* L)
     return numberOfReturnValues;
 }
 
+int CreateUserDatum(lua_State* L)
+{
+    rttr::type& typeToCreate = *(rttr::type*) lua_touserdata(L, lua_upvalueindex(1));
+    
+    void* ud = lua_newuserdata(L, sizeof(rttr::variant));          // Get lua to create a new user datum as a variant
+    new (ud) rttr::variant(typeToCreate.create());                 // Placement new (Calls varient constructor without allocating memory.
+                                                                   // Since typeToCreate.create() is a rvalue, rttr::variant will use a move constructor
+    //-- rttr:variant& variant = *(rttr:variant*)ud; --
+    
+    lua_newtable(L);                                               // Create new user table: Stores any additional value to the native object
+    lua_setuservalue(L, 1);                                        // Associate this userdatum with the non-native table
+    
+    return 1; // Return the userdatum
+}
 
 
 void AutomatedBindingTutorial()
@@ -158,6 +175,8 @@ void AutomatedBindingTutorial()
     
     // Open the lua state using memory pool
     lua_State* L = lua_newstate(ArenaAllocator::l_alloc, &pool);
+    
+    // --- BINDING GLOBAL METHODS TO LUA ---
     
     // Push new table and name it "Global"
     lua_newtable(L);
@@ -177,7 +196,23 @@ void AutomatedBindingTutorial()
         // Set the table
         lua_settable(L, -3);                                            //1[2] = 3
     }
-  
+    // ----------------------------
+
+    // --- BINDING CLASSES TO LUA ---
+    for (auto& classToRegister : rttr::type::get_types())
+    {
+        if (classToRegister.is_class())
+        {
+            lua_newtable(L);                                                    // Create new class table
+            lua_pushvalue(L, -1);                                               // Push table second time
+            lua_setglobal(L, classToRegister.get_name().to_string().c_str());   // Create global with class name pointing to created table
+            
+            lua_pushlightuserdata(L, (void*) &classToRegister);                 // Push upvalue pointer to our rttr type
+            lua_pushcclosure(L, CreateUserDatum, 1);                            // Push c function for user datum creation
+            lua_setfield(L, -2, "new");                                         // Set field for creation on class table
+        }
+    }
+    // ----------------------------
     
     // Execute lua script
     int res = luaL_dostring(L, LUA_SCRIPT);
