@@ -15,9 +15,9 @@ void HelloWorld2()
     printf("Hello, World 2!\n");
 }
 
-void Test()
+void Test(int x, short y)
 {
-    printf("Test!\n");
+    printf("Test! %d, %d\n", x, y);
 }
 
 
