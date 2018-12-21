@@ -16,7 +16,8 @@ const char* LUA_SCRIPT = R"(
 -- lua script
 Global.HelloWorld()
 Global.HelloWorld2()
-Global.Test(10, 22)
+local c = Global.Mul(42, 43)
+Global.Test(c, 22, 10)
 )";
 
 union PassByValue
@@ -110,13 +111,37 @@ int CallGlobalFromLua(lua_State* L)
     }
     
     rttr::variant result = methodToInvoke.invoke_variadic({}, nativeArgs);
+    int numberOfReturnValues = 0;
     if (result.is_valid() == false)
     {
-        printf("Unable to invoke '%s'\n", methodToInvoke.get_name().to_string().c_str());
-        assert(false);
+        luaL_error(L, "Unable to invoke '%s'\n", methodToInvoke.get_name().to_string().c_str());
+    }
+    // If there is a return
+    else if (result.is_type<void>() == false)
+    {
+        // Handle int return
+        if (result.is_type<int>())
+        {
+            lua_pushnumber(L, result.get_value<int>());
+            numberOfReturnValues++;
+        }
+        else if (result.is_type<short>())
+        {
+            lua_pushnumber(L, result.get_value<short>());
+            numberOfReturnValues++;
+        }
+        
+        else
+        {
+            luaL_error(L,
+                       "Unhandled return type '%s' from native method '%s'\n",
+                       result.get_type().get_name().to_string().c_str(),
+                       methodToInvoke.get_name().to_string().c_str());
+        }
+        
     }
     
-    return 0;
+    return numberOfReturnValues;
 }
 
 
