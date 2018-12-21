@@ -15,7 +15,10 @@ endif()
 # source for the test executable
 set  (LUA_TUTORIAL_SOURCES
 		"main.cpp"
-        "ArenaAllocator.h" )
+        "ArenaAllocator.h"
+        "AutomatedBinding.h"
+        "AutomatedBinding.cpp"
+        "TestRegistrations.cpp" )
 		
 source_group("src" FILES ${LUA_TUTORIAL_SOURCES})
 		

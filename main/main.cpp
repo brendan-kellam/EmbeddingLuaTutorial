@@ -1,4 +1,5 @@
 #include "ArenaAllocator.h"
+#include "AutomatedBinding.h"
 #include "lua.hpp"
 #include <iostream>
 #include <assert.h>
@@ -1285,6 +1286,8 @@ int main()
         assert(spriteManager.m_numberOfSpritesExisting == 0);
         
     }
+    
+    AutomatedBindingTutorial();
     
     
 	return 0;
