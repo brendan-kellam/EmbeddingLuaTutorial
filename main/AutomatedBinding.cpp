@@ -18,7 +18,6 @@ Global.HelloWorld()
 Global.HelloWorld2()
 local c = Global.Mul(42, 43)
 Global.Test(c, 22, 10)
-local spr = Sprite.new()
 )";
 
 
@@ -147,6 +146,14 @@ int CallGlobalFromLua(lua_State* L)
     return numberOfReturnValues;
 }
 
+// Returns the meta table name for type t
+std::string MetaTableName(const rttr::type& t)
+{
+    std::string metaTableName = t.get_name().to_string();
+    metaTableName.append("_MT_");
+    return metaTableName;
+}
+
 int CreateUserDatum(lua_State* L)
 {
     rttr::type& typeToCreate = *(rttr::type*) lua_touserdata(L, lua_upvalueindex(1));
@@ -156,12 +163,21 @@ int CreateUserDatum(lua_State* L)
                                                                    // Since typeToCreate.create() is a rvalue, rttr::variant will use a move constructor
     //-- rttr:variant& variant = *(rttr:variant*)ud; --
     
+    luaL_getmetatable(L, MetaTableName(typeToCreate).c_str());     // Retreive meta-table
+    lua_setmetatable(L, 1);                                        // Assign meta-table to user datum (our type). Pops metatable off stack
+
     lua_newtable(L);                                               // Create new user table: Stores any additional value to the native object
     lua_setuservalue(L, 1);                                        // Associate this userdatum with the non-native table
     
     return 1; // Return the userdatum
 }
 
+int DestroyUserDatum(lua_State* L)
+{
+    rttr::variant* ud = (rttr::variant*) lua_touserdata(L, -1);    // Get user datum (variant)
+    ud->~variant();                                                // Call destructor on variant (will then internally call the type's destructor)
+    return 0;
+}
 
 void AutomatedBindingTutorial()
 {
@@ -210,6 +226,15 @@ void AutomatedBindingTutorial()
             lua_pushlightuserdata(L, (void*) &classToRegister);                 // Push upvalue pointer to our rttr type
             lua_pushcclosure(L, CreateUserDatum, 1);                            // Push c function for user datum creation
             lua_setfield(L, -2, "new");                                         // Set field for creation on class table
+            
+            
+            luaL_newmetatable(L, MetaTableName(classToRegister).c_str());                                // Create new type metatable. NOTE: Metatable will be shared by many objects
+            
+            lua_pushstring(L, "__gc");                                          // Push garbage collection metamethod name
+            lua_pushcfunction(L, DestroyUserDatum);                             // Push c function for user datum descruction
+            lua_settable(L, -3);                                                // Add __gc (key) and DestroyUserDatum (value) onto metatable
+            
+            
         }
     }
     // ----------------------------

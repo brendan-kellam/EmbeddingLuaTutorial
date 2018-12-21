@@ -37,7 +37,9 @@ struct Sprite
     int y;
     
     Sprite() : x(0), y(0)
-    { }
+    {
+        
+    }
     
     ~Sprite()
     { }
